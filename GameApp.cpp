@@ -19,10 +19,10 @@ bool is_game_over = false;
 int game_score = 0;
 int high_score = 0;
 const int GROUND_Y = 300; 
-const int DINO_X_POS = 50; // Far left as requested
+const int DINO_X_POS = 60; 
 int rhino_y = GROUND_Y - 80;
 float rhino_vf = 0; 
-int cactus_x = 1500; // 2-second initial delay
+int cactus_x = 1500; 
 
 Preferences gamePrefs;
 
@@ -82,11 +82,11 @@ void build_game_screen() {
     lv_obj_set_style_border_width(ground_line_obj, 0, 0);
 
     cactus_obj = lv_obj_create(game_screen);
-    lv_obj_set_size(cactus_obj, 20, 60);
+    lv_obj_set_size(cactus_obj, 25, 60);
     lv_obj_set_pos(cactus_obj, cactus_x, GROUND_Y - 60);
     lv_obj_set_style_bg_color(cactus_obj, lv_color_hex(0x07E000), 0);
     lv_obj_set_style_border_width(cactus_obj, 0, 0);
-    lv_obj_set_style_radius(cactus_obj, 3, 0);
+    lv_obj_set_style_radius(cactus_obj, 4, 0);
 
     rhino_canvas = lv_canvas_create(game_screen);
     lv_canvas_set_buffer(rhino_canvas, rhino_buffer, 100, 80, LV_IMG_CF_TRUE_COLOR);
@@ -96,14 +96,14 @@ void build_game_screen() {
     lv_label_set_text(high_score_label, "Best: 0");
     lv_obj_set_style_text_color(high_score_label, lv_color_hex(0xFFFF00), 0);
     lv_obj_set_style_text_font(high_score_label, &lv_font_montserrat_24, 0);
-    lv_obj_align(high_score_label, LV_ALIGN_BOTTOM_MID, 0, -70);
+    lv_obj_align(high_score_label, LV_ALIGN_BOTTOM_MID, 0, -75);
     lv_obj_add_flag(high_score_label, LV_OBJ_FLAG_HIDDEN);
 
     score_label = lv_label_create(lv_layer_top());
     lv_label_set_text(score_label, "Score: 0");
     lv_obj_set_style_text_color(score_label, lv_color_hex(0xFFFFFF), 0);
     lv_obj_set_style_text_font(score_label, &lv_font_montserrat_24, 0);
-    lv_obj_align(score_label, LV_ALIGN_BOTTOM_MID, 0, -40);
+    lv_obj_align(score_label, LV_ALIGN_BOTTOM_MID, 0, -45);
     lv_obj_add_flag(score_label, LV_OBJ_FLAG_HIDDEN);
 
     lv_obj_add_event_cb(game_screen, game_gesture_cb, LV_EVENT_ALL, NULL);
@@ -150,7 +150,7 @@ void game_loop_handler() {
     lv_obj_invalidate(rhino_canvas);
 
     cactus_x -= (10 + (game_score / 5));
-    if (cactus_x < -30) {
+    if (cactus_x < -40) {
         cactus_x = 466;
         game_score++;
         lv_label_set_text_fmt(score_label, "Score: %d", game_score);
@@ -161,13 +161,12 @@ void game_loop_handler() {
     }
     lv_obj_set_x(cactus_obj, cactus_x);
 
-    // DYNAMIC COLLISION DETECTION
-    // Rhino visual bounds are DINO_X_POS + 10 to DINO_X_POS + 90
-    // Cactus is 20px wide. 
-    // They touch if cactus_x is between (DINO_X_POS + 10 - 20) and (DINO_X_POS + 90)
-    if (cactus_x > (DINO_X_POS - 10) && cactus_x < (DINO_X_POS + 90)) {
-        // Vertical check: hit if bottom of rhino (rhino_y + 80) is below top of cactus (GROUND_Y - 60)
-        if (rhino_y + 75 > GROUND_Y - 60) {
+    // PIXEL-TIGHT COLLISION
+    // Rhino Body is roughly from DINO_X_POS+20 to DINO_X_POS+80 (80 to 140)
+    // Cactus is 25px wide.
+    if (cactus_x > (DINO_X_POS + 10 - 25) && cactus_x < (DINO_X_POS + 80)) {
+        // Vertical check: hit if bottom of rhino (rhino_y + 80) is below top of cactus
+        if (rhino_y + 70 > GROUND_Y - 60) {
             is_game_over = true;
             render_rhino_on_canvas(true); 
             gamePrefs.begin("game", false);
