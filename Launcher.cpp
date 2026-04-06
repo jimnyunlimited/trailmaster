@@ -3,6 +3,7 @@
 #include "InclinometerApp.h"
 #include "PhotoFrameApp.h"
 #include "SettingsApp.h"
+#include "GameApp.h"
 
 // --- Launcher Globals ---
 lv_obj_t * launcher_screen = NULL;
@@ -17,6 +18,8 @@ static void app_btn_event_cb(lv_event_t * e) {
         } else if (app_id == 2) {
             switch_to_photoframe();
         } else if (app_id == 3) {
+            switch_to_game();
+        } else if (app_id == 4) {
             switch_to_settings();
         }
     }
@@ -78,7 +81,8 @@ void build_launcher_screen() {
     // --- Add Apps to Launcher ---
     create_launcher_btn(launcher_screen, LV_SYMBOL_GPS, "Inclinometer", 1, 0xE67E22);
     create_launcher_btn(launcher_screen, LV_SYMBOL_IMAGE, "Photo Frame", 2, 0x2ECC71);
-    create_launcher_btn(launcher_screen, LV_SYMBOL_SETTINGS, "Settings", 3, 0x9E9E9E);
+    create_launcher_btn(launcher_screen, LV_SYMBOL_KEYBOARD, "Rhino Jump", 3, 0x3498DB);
+    create_launcher_btn(launcher_screen, LV_SYMBOL_SETTINGS, "Settings", 4, 0x9E9E9E);
 }
 
 // --- Screen Switchers ---

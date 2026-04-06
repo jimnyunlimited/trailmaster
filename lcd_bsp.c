@@ -142,6 +142,15 @@ static void example_lvgl_unlock(void)
   assert(lvgl_mux && "bsp_display_start must be called first");
   xSemaphoreGive(lvgl_mux);
 }
+
+bool lvgl_port_lock(int timeout_ms) {
+    return example_lvgl_lock(timeout_ms);
+}
+
+void lvgl_port_unlock(void) {
+    example_lvgl_unlock();
+}
+
 static void example_lvgl_port_task(void *arg)
 {
   uint32_t task_delay_ms = EXAMPLE_LVGL_TASK_MAX_DELAY_MS;

@@ -29,6 +29,10 @@ static void example_lvgl_unlock(void);
 static bool example_lvgl_lock(int timeout_ms);
 void lcd_lvgl_Init(void);
 static void example_lvgl_touch_cb(lv_indev_drv_t *drv, lv_indev_data_t *data);
+
+bool lvgl_port_lock(int timeout_ms);
+void lvgl_port_unlock(void);
+
 #ifdef __cplusplus
 }
 #endif

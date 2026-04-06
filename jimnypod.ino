@@ -14,6 +14,7 @@
 #include "InclinometerApp.h"
 #include "PhotoFrameApp.h"
 #include "SettingsApp.h"
+#include "GameApp.h"
 #include <math.h>
 #include <vector>
 
@@ -53,6 +54,7 @@ void setup() {
     build_inclinometer_screen();
     build_photoframe_screen();
     build_settings_screen();
+    build_game_screen();
     setup_brightness_overlay();
 
     // Start on Launcher
@@ -60,10 +62,12 @@ void setup() {
 }
 
 void loop() {
-    // Handle App Specific Logic
-    inclinometer_loop_handler();
-    photoframe_loop_handler();
-
-    lv_timer_handler();
+    if (lvgl_port_lock(10)) {
+        // Handle App Specific Logic
+        inclinometer_loop_handler();
+        photoframe_loop_handler();
+        game_loop_handler();
+        lvgl_port_unlock();
+    }
     delay(5);
 }
