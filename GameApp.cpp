@@ -20,7 +20,7 @@ int game_score = 0;
 int high_score = 0;
 const int GROUND_Y = 300; 
 const int DINO_X_POS = 60; 
-int rhino_y = GROUND_Y - 80;
+int rhino_y = GROUND_Y - 81; // 1px clearance to avoid road overlap
 float rhino_vf = 0; 
 int cactus_x = 1500; 
 
@@ -54,7 +54,7 @@ static void game_gesture_cb(lv_event_t * e) {
             is_game_over = false;
             game_score = 0;
             cactus_x = 1000;
-            rhino_y = GROUND_Y - 80;
+            rhino_y = GROUND_Y - 81;
             rhino_vf = 0;
             lv_label_set_text(score_label, "Score: 0");
             render_rhino_on_canvas(false);
@@ -75,12 +75,7 @@ void build_game_screen() {
     lv_obj_set_style_bg_color(game_screen, lv_color_hex(0x000000), 0);
     lv_obj_clear_flag(game_screen, LV_OBJ_FLAG_SCROLLABLE);
 
-    ground_line_obj = lv_obj_create(game_screen);
-    lv_obj_set_size(ground_line_obj, 466, 4);
-    lv_obj_set_pos(ground_line_obj, 0, GROUND_Y);
-    lv_obj_set_style_bg_color(ground_line_obj, lv_color_hex(0xFFFFFF), 0);
-    lv_obj_set_style_border_width(ground_line_obj, 0, 0);
-
+    // 1. Create Game Objects First
     cactus_obj = lv_obj_create(game_screen);
     lv_obj_set_size(cactus_obj, 25, 60);
     lv_obj_set_pos(cactus_obj, cactus_x, GROUND_Y - 60);
@@ -92,6 +87,14 @@ void build_game_screen() {
     lv_canvas_set_buffer(rhino_canvas, rhino_buffer, 100, 80, LV_IMG_CF_TRUE_COLOR);
     render_rhino_on_canvas(false);
 
+    // 2. Create Road LAST so it is on top of any background artifacts
+    ground_line_obj = lv_obj_create(game_screen);
+    lv_obj_set_size(ground_line_obj, 466, 4);
+    lv_obj_set_pos(ground_line_obj, 0, GROUND_Y);
+    lv_obj_set_style_bg_color(ground_line_obj, lv_color_hex(0xFFFFFF), 0);
+    lv_obj_set_style_border_width(ground_line_obj, 0, 0);
+
+    // 3. UI Labels on Top Layer
     high_score_label = lv_label_create(lv_layer_top());
     lv_label_set_text(high_score_label, "Best: 0");
     lv_obj_set_style_text_color(high_score_label, lv_color_hex(0xFFFF00), 0);
@@ -115,7 +118,7 @@ void switch_to_game() {
     is_game_over = false;
     game_score = 0;
     cactus_x = 1500; 
-    rhino_y = GROUND_Y - 80;
+    rhino_y = GROUND_Y - 81;
     rhino_vf = 0;
     
     lv_obj_clear_flag(score_label, LV_OBJ_FLAG_HIDDEN);
@@ -140,8 +143,8 @@ void game_loop_handler() {
     if (is_jumping) {
         rhino_vf += 1.0f; 
         rhino_y += (int)rhino_vf;
-        if (rhino_y >= GROUND_Y - 80) {
-            rhino_y = GROUND_Y - 80;
+        if (rhino_y >= GROUND_Y - 81) {
+            rhino_y = GROUND_Y - 81;
             is_jumping = false;
             rhino_vf = 0;
         }
@@ -161,11 +164,12 @@ void game_loop_handler() {
     }
     lv_obj_set_x(cactus_obj, cactus_x);
 
-    // PIXEL-TIGHT COLLISION
-    // Rhino Body is roughly from DINO_X_POS+20 to DINO_X_POS+80 (80 to 140)
-    // Cactus is 25px wide.
-    if (cactus_x > (DINO_X_POS + 10 - 25) && cactus_x < (DINO_X_POS + 80)) {
-        // Vertical check: hit if bottom of rhino (rhino_y + 80) is below top of cactus
+    // PIXEL-PERFECT COLLISION WINDOW
+    // Rhino visual body is exactly absolute X = 80 to 130
+    // Cactus is 25 wide.
+    // They touch if cactus_x < 130 AND cactus_x > 55
+    if (cactus_x > 55 && cactus_x < 130) {
+        // Vertical check: hit if rhino's chest/feet drop below cactus top (GROUND_Y - 60)
         if (rhino_y + 70 > GROUND_Y - 60) {
             is_game_over = true;
             render_rhino_on_canvas(true); 
