@@ -28,7 +28,7 @@ void setup() {
     delay(1000);
 
     Serial.println("\n╔════════════════════════════════════════╗");
-    Serial.println("║ TRAILMASTER OS - Multi App Environment  ║");
+    Serial.println("║ TRAILMASTER OS - Multi App Environment ║");
     Serial.println("╚════════════════════════════════════════╝\n");
 
     if (ESP.getPsramSize() == 0) {
