@@ -23,8 +23,8 @@ unsigned long countdown_start_ms = 0;
 int game_score = 0;
 int high_score = 0;
 const int GROUND_Y = 300; 
-const int DINO_X_POS = 100; // Moved further right
-int rhino_y = GROUND_Y - 81;
+const int DINO_X_POS = 80; // Back to left for anticipation room
+int rhino_y = GROUND_Y - 80;
 float rhino_vf = 0; 
 int cactus_x = 1000; 
 
@@ -56,7 +56,6 @@ static void start_countdown() {
     countdown_start_ms = millis();
     lv_obj_clear_flag(countdown_label, LV_OBJ_FLAG_HIDDEN);
     lv_label_set_text(countdown_label, "3");
-    // Hide cactus and reset rhino
     cactus_x = 1000;
     lv_obj_set_x(cactus_obj, cactus_x);
 }
@@ -67,7 +66,7 @@ static void game_gesture_cb(lv_event_t * e) {
         if (is_game_over) {
             is_game_over = false;
             game_score = 0;
-            rhino_y = GROUND_Y - 81;
+            rhino_y = GROUND_Y - 80;
             rhino_vf = 0;
             lv_label_set_text(score_label, "Score: 0");
             render_rhino_on_canvas(false);
@@ -95,12 +94,12 @@ void build_game_screen() {
     lv_obj_set_pos(cactus_obj, cactus_x, GROUND_Y - 60);
     lv_obj_set_style_bg_color(cactus_obj, lv_color_hex(0x07E000), 0);
     lv_obj_set_style_border_width(cactus_obj, 0, 0);
-    lv_obj_set_style_pad_all(cactus_obj, 0, 0); // Remove padding
+    lv_obj_set_style_pad_all(cactus_obj, 0, 0);
     lv_obj_set_style_radius(cactus_obj, 4, 0);
 
     rhino_canvas = lv_canvas_create(game_screen);
     lv_canvas_set_buffer(rhino_canvas, rhino_buffer, 100, 80, LV_IMG_CF_TRUE_COLOR);
-    lv_obj_set_style_pad_all(rhino_canvas, 0, 0); // Remove padding
+    lv_obj_set_style_pad_all(rhino_canvas, 0, 0);
     render_rhino_on_canvas(false);
 
     ground_line_obj = lv_obj_create(game_screen);
@@ -123,11 +122,10 @@ void build_game_screen() {
     lv_obj_align(score_label, LV_ALIGN_BOTTOM_MID, 0, -45);
     lv_obj_add_flag(score_label, LV_OBJ_FLAG_HIDDEN);
 
-    // Countdown Label
     countdown_label = lv_label_create(lv_layer_top());
     lv_obj_set_style_text_color(countdown_label, lv_color_hex(0xFFFFFF), 0);
-    lv_obj_set_style_text_font(countdown_label, &lv_font_montserrat_48, 0); // Large font
-    lv_obj_center(countdown_label);
+    lv_obj_set_style_text_font(countdown_label, &lv_font_montserrat_48, 0); 
+    lv_obj_align(countdown_label, LV_ALIGN_CENTER, 0, -80);
     lv_obj_add_flag(countdown_label, LV_OBJ_FLAG_HIDDEN);
 
     lv_obj_add_event_cb(game_screen, game_gesture_cb, LV_EVENT_ALL, NULL);
@@ -138,7 +136,7 @@ void switch_to_game() {
     is_gaming = true;
     is_game_over = false;
     game_score = 0;
-    rhino_y = GROUND_Y - 81;
+    rhino_y = GROUND_Y - 80;
     rhino_vf = 0;
     
     lv_obj_clear_flag(score_label, LV_OBJ_FLAG_HIDDEN);
@@ -161,7 +159,6 @@ void game_loop_handler() {
     if (millis() - last_tick < 20) return;
     last_tick = millis();
 
-    // Handle Countdown
     if (countdown_val > 0) {
         if (millis() - countdown_start_ms >= 1000) {
             countdown_val--;
@@ -170,26 +167,27 @@ void game_loop_handler() {
                 lv_label_set_text_fmt(countdown_label, "%d", countdown_val);
             } else {
                 lv_obj_add_flag(countdown_label, LV_OBJ_FLAG_HIDDEN);
-                cactus_x = 600; // Start the first cactus
+                cactus_x = 600; 
             }
         }
-        return; // Pause game logic during countdown
+        return; 
     }
 
     if (is_game_over) return;
 
-    // Physics
     if (is_jumping) {
         rhino_vf += 1.0f; 
         rhino_y += (int)rhino_vf;
-        if (rhino_y >= GROUND_Y - 81) {
-            rhino_y = GROUND_Y - 81;
+        if (rhino_y >= GROUND_Y - 80) {
+            rhino_y = GROUND_Y - 80;
             is_jumping = false;
             rhino_vf = 0;
         }
+        // FORCE FULL SCREEN REFRESH DURING JUMP TO KILL GHOSTING
+        lv_obj_invalidate(game_screen);
     }
     lv_obj_set_y(rhino_canvas, rhino_y);
-    lv_obj_invalidate(rhino_canvas);
+    lv_obj_set_x(rhino_canvas, DINO_X_POS);
 
     cactus_x -= (10 + (game_score / 5));
     if (cactus_x < -40) {
@@ -203,13 +201,11 @@ void game_loop_handler() {
     }
     lv_obj_set_x(cactus_obj, cactus_x);
 
-    // EVEN TIGHTER COLLISION
-    // Rhino is at X=100. Body mass is visual X = 115 to 175.
-    // Cactus is 25 wide.
-    // Collision starts when cactus right edge (cactus_x + 25) hits rhino body left (115) -> cactus_x = 90
-    // Collision ends when cactus left edge (cactus_x) leaves rhino head right (190) -> cactus_x = 190
-    if (cactus_x > 90 && cactus_x < 185) {
-        if (rhino_y + 72 > GROUND_Y - 60) {
+    // PIXEL-STRICT COLLISION WINDOW FOR DINO_X_POS = 80
+    // Cactus right edge hits rhino body: cactus_x + 25 > 90 -> cactus_x > 65
+    // Cactus left edge leaves rhino head: cactus_x < 140
+    if (cactus_x > 65 && cactus_x < 140) {
+        if (rhino_y + 65 > GROUND_Y - 60) {
             is_game_over = true;
             render_rhino_on_canvas(true); 
             gamePrefs.begin("game", false);
