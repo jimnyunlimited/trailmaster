@@ -47,6 +47,19 @@ System-level configurations.
 *   **Persistence**: Uses the `Preferences` library to save your brightness level even after power-off.
 *   **Long Press**: Returns to the App Launcher.
 
+### 4. 🎮 Rhino Jump
+A persistent high-score game with precise physics.
+*   **Gameplay**: Tap to jump over obstacles.
+*   **Countdown**: 3-second lead-in before each round starts.
+*   **Best Score**: Your all-time record is saved to flash.
+*   **Long Press**: Returns to the App Launcher.
+
+### 5. 🏎 OBD Gauge
+Real-time vehicle diagnostics via WiFi OBDII adapter.
+*   **Connectivity**: Connects to an ELM327 WiFi adapter (`WiFi_OBDII`).
+*   **Data**: Displays Speed (km/h), RPM (with visual arc), Engine Temperature, and Battery Voltage.
+*   **Long Press**: Returns to the App Launcher.
+
 ---
 
 ## 🛠 Developer Guide: Adding a New App

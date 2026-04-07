@@ -5,6 +5,7 @@
 
 #include <Arduino.h>
 #include <FFat.h>
+#include <WiFi.h>
 #include "lcd_bsp.h"
 #include "FT3168.h"
 #include "i2c_bsp.h"
@@ -15,6 +16,7 @@
 #include "PhotoFrameApp.h"
 #include "SettingsApp.h"
 #include "GameApp.h"
+#include "OBDApp.h"
 #include <math.h>
 #include <vector>
 
@@ -34,15 +36,17 @@ void setup() {
         while(1) { delay(1000); }
     }
 
+    // WiFi is handled on-demand by apps to save memory and power
+    WiFi.mode(WIFI_OFF);
+
     I2C_master_Init(); 
     Touch_Init();
     lcd_lvgl_Init();
 
-    // Init IMU
+    // Init Apps (Build screens, allocate memory)
     inclinometer_setup_imu();
-
-    // Photo Frame Setup (Includes PSRAM allocation and WiFi)
     photoframe_setup();
+    obd_setup();
 
     // Mount FFat
     if (FFat.begin(true)) {
@@ -55,6 +59,7 @@ void setup() {
     build_photoframe_screen();
     build_settings_screen();
     build_game_screen();
+    build_obd_screen();
     setup_brightness_overlay();
 
     // Start on Launcher
@@ -63,10 +68,10 @@ void setup() {
 
 void loop() {
     if (lvgl_port_lock(10)) {
-        // Handle App Specific Logic
         inclinometer_loop_handler();
         photoframe_loop_handler();
         game_loop_handler();
+        obd_loop_handler();
         lvgl_port_unlock();
     }
     delay(5);

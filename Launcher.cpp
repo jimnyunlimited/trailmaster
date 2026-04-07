@@ -4,6 +4,7 @@
 #include "PhotoFrameApp.h"
 #include "SettingsApp.h"
 #include "GameApp.h"
+#include "OBDApp.h"
 
 // --- Launcher Globals ---
 lv_obj_t * launcher_screen = NULL;
@@ -14,12 +15,14 @@ static void app_btn_event_cb(lv_event_t * e) {
     if(code == LV_EVENT_CLICKED) {
         int app_id = (int)(intptr_t)lv_event_get_user_data(e);
         if (app_id == 1) {
-            switch_to_inclinometer();
+            switch_to_obd();
         } else if (app_id == 2) {
-            switch_to_photoframe();
+            switch_to_inclinometer();
         } else if (app_id == 3) {
-            switch_to_game();
+            switch_to_photoframe();
         } else if (app_id == 4) {
+            switch_to_game();
+        } else if (app_id == 5) {
             switch_to_settings();
         }
     }
@@ -73,20 +76,24 @@ void build_launcher_screen() {
     lv_obj_set_flex_align(launcher_screen, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
     
     // Add padding so the first and last items can be scrolled to the exact center of the round screen
-    // Screen height is 466. Center is 233. Button height is 90 (center is 45). 233 - 45 = 188px padding.
     lv_obj_set_style_pad_top(launcher_screen, 188, 0);
     lv_obj_set_style_pad_bottom(launcher_screen, 188, 0);
     lv_obj_set_style_pad_row(launcher_screen, 20, 0); // 20px gap between buttons
 
-    // --- Add Apps to Launcher ---
-    create_launcher_btn(launcher_screen, LV_SYMBOL_GPS, "Inclinometer", 1, 0xE67E22);
-    create_launcher_btn(launcher_screen, LV_SYMBOL_IMAGE, "Photo Frame", 2, 0x2ECC71);
-    create_launcher_btn(launcher_screen, LV_SYMBOL_KEYBOARD, "Rhino Jump", 3, 0x3498DB);
-    create_launcher_btn(launcher_screen, LV_SYMBOL_SETTINGS, "Settings", 4, 0x9E9E9E);
+    // --- Add Apps to Launcher (Reordered) ---
+    create_launcher_btn(launcher_screen, LV_SYMBOL_DRIVE, "OBD Gauge", 1, 0xF1C40F);
+    create_launcher_btn(launcher_screen, LV_SYMBOL_GPS, "Inclinometer", 2, 0xE67E22);
+    create_launcher_btn(launcher_screen, LV_SYMBOL_IMAGE, "Photo Frame", 3, 0x2ECC71);
+    create_launcher_btn(launcher_screen, LV_SYMBOL_KEYBOARD, "Rhino Jump", 4, 0x3498DB);
+    create_launcher_btn(launcher_screen, LV_SYMBOL_SETTINGS, "Settings", 5, 0x9E9E9E);
 }
 
 // --- Screen Switchers ---
 void switch_to_launcher() {
+    // Stop all WiFi services when returning to launcher
+    stop_photoframe_wifi();
+    stop_obd_wifi();
+    
     current_state = STATE_LAUNCHER;
     lv_scr_load_anim(launcher_screen, LV_SCR_LOAD_ANIM_FADE_ON, 300, 0, false);
 }

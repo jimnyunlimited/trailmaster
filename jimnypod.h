@@ -5,7 +5,7 @@
 #include "lvgl.h"
 
 // --- Global State Machine ---
-enum AppState { STATE_LAUNCHER, STATE_INCLINOMETER, STATE_PHOTOFRAME, STATE_SETTINGS, STATE_GAME };
+enum AppState { STATE_LAUNCHER, STATE_INCLINOMETER, STATE_PHOTOFRAME, STATE_SETTINGS, STATE_GAME, STATE_OBD };
 extern AppState current_state;
 
 // --- Function Prototypes ---
@@ -14,5 +14,6 @@ void switch_to_inclinometer();
 void switch_to_photoframe();
 void switch_to_settings();
 void switch_to_game();
+void switch_to_obd();
 
 #endif // JIMNYPOD_H

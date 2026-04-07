@@ -37,4 +37,8 @@ void delete_current_image();
 void photoframe_setup();
 void photoframe_loop_handler();
 
+// WiFi Management
+void start_photoframe_wifi();
+void stop_photoframe_wifi();
+
 #endif // PHOTO_FRAME_APP_H

@@ -92,7 +92,7 @@ const char index_html[] = R"rawliteral(
         async function loadImage() {
             const file = document.getElementById('fileInput').files[0];
             if (!file) return;
-            document.getElementById('selectBtn').innerText = "Select More Photos";
+            document.getElementById('selectBtn').innerText = "Change Photo";
             img.src = URL.createObjectURL(file);
             await new Promise(r => img.onload = r);
             minScale = Math.max(466 / img.width, 466 / img.height);
@@ -230,6 +230,8 @@ lv_obj_t * wifi_screen_cont;
 uint8_t * psram_buffer = NULL;
 lv_img_dsc_t img_dsc;
 
+static bool wifi_ap_running = false;
+
 // --- Callbacks ---
 static void btn_yes_cb(lv_event_t * e) {
     lv_obj_t * overlay = (lv_obj_t *)lv_event_get_user_data(e);
@@ -256,7 +258,6 @@ static void photoframe_gesture_cb(lv_event_t * e) {
         } else if (dir == LV_DIR_RIGHT) {
             prev_image();
         } else if (dir == LV_DIR_TOP) { 
-            // SWIPE UP TO DELETE
             if (!image_files.empty() && !delete_dialog_open) {
                 delete_dialog_open = true; 
                 lv_obj_t * overlay = lv_obj_create(photoframe_screen);
@@ -269,9 +270,7 @@ static void photoframe_gesture_cb(lv_event_t * e) {
                 lv_obj_t * label = lv_label_create(overlay);
                 lv_label_set_text(label, "Delete this photo?");
                 lv_obj_set_style_text_color(label, lv_color_hex(0xFFFFFF), 0);
-                #if LV_FONT_MONTSERRAT_24
-                    lv_obj_set_style_text_font(label, &lv_font_montserrat_24, 0);
-                #endif
+                lv_obj_set_style_text_font(label, &lv_font_montserrat_24, 0);
                 lv_obj_align(label, LV_ALIGN_CENTER, 0, -40);
                 
                 lv_obj_t * btn_yes = lv_btn_create(overlay);
@@ -295,8 +294,8 @@ static void photoframe_gesture_cb(lv_event_t * e) {
         }
     } 
     else if (code == LV_EVENT_LONG_PRESSED) {
-        // UNIVERSAL EXIT: Long press to go back to launcher
         if (!delete_dialog_open) {
+            stop_photoframe_wifi();
             switch_to_launcher();
         }
     }
@@ -326,11 +325,7 @@ void build_photoframe_screen() {
     lv_obj_t * title = lv_label_create(wifi_screen_cont);
     lv_label_set_text(title, "TRAILMASTER");
     lv_obj_set_style_text_color(title, lv_color_hex(0xe67e22), 0);
-    #if LV_FONT_MONTSERRAT_28
-        lv_obj_set_style_text_font(title, &lv_font_montserrat_28, 0);
-    #elif LV_FONT_MONTSERRAT_24
-        lv_obj_set_style_text_font(title, &lv_font_montserrat_24, 0);
-    #endif
+    lv_obj_set_style_text_font(title, &lv_font_montserrat_28, 0);
     lv_obj_align(title, LV_ALIGN_CENTER, 0, -180);
 
     lv_obj_t * hardcoded_qr = lv_img_create(wifi_screen_cont);
@@ -352,17 +347,13 @@ void build_photoframe_screen() {
     lv_label_set_text_fmt(cred_lbl, "WiFi: %s\nPass: %s", AP_SSID, AP_PASSWORD);
     lv_obj_set_style_text_color(cred_lbl, lv_color_hex(0xAAAAAA), 0);
     lv_obj_set_style_text_align(cred_lbl, LV_TEXT_ALIGN_CENTER, 0);
-    #if LV_FONT_MONTSERRAT_24
-        lv_obj_set_style_text_font(cred_lbl, &lv_font_montserrat_24, 0);
-    #endif
+    lv_obj_set_style_text_font(cred_lbl, &lv_font_montserrat_24, 0);
     lv_obj_center(cred_lbl);
 
     lv_obj_t * url_lbl = lv_label_create(wifi_screen_cont);
     lv_label_set_text(url_lbl, "http://trailmaster.io");
     lv_obj_set_style_text_color(url_lbl, lv_color_hex(0x4CAF50), 0);
-    #if LV_FONT_MONTSERRAT_24
-        lv_obj_set_style_text_font(url_lbl, &lv_font_montserrat_24, 0);
-    #endif
+    lv_obj_set_style_text_font(url_lbl, &lv_font_montserrat_24, 0);
     lv_obj_align(url_lbl, LV_ALIGN_CENTER, 0, 175);
 }
 
@@ -372,6 +363,8 @@ void switch_to_photoframe() {
     scan_images();
     if (image_files.size() > 0) {
         show_image(0);
+    } else {
+        start_photoframe_wifi();
     }
 }
 
@@ -395,6 +388,7 @@ void show_image(int index) {
     if (image_files.empty() || index < 0 || index >= image_files.size()) {
         lv_obj_clear_flag(wifi_screen_cont, LV_OBJ_FLAG_HIDDEN);
         lv_obj_add_flag(img_obj, LV_OBJ_FLAG_HIDDEN);
+        start_photoframe_wifi();
         return;
     }
     String path = image_files[index];
@@ -431,6 +425,7 @@ void delete_current_image() {
     if (image_files.empty()) {
         lv_obj_add_flag(img_obj, LV_OBJ_FLAG_HIDDEN);
         lv_obj_clear_flag(wifi_screen_cont, LV_OBJ_FLAG_HIDDEN);
+        start_photoframe_wifi();
     } else {
         if (current_image_index >= image_files.size()) current_image_index = 0;
         show_image(current_image_index);
@@ -438,7 +433,6 @@ void delete_current_image() {
 }
 
 void photoframe_setup() {
-    // Allocate PSRAM
     psram_buffer = (uint8_t *)heap_caps_malloc(466 * 466 * 2, MALLOC_CAP_SPIRAM);
     img_dsc.header.always_zero = 0;
     img_dsc.header.w = 466;
@@ -447,9 +441,6 @@ void photoframe_setup() {
     img_dsc.data_size = 466 * 466 * 2;
     img_dsc.data = psram_buffer;
 
-    // Start WiFi & Web Server
-    WiFi.softAP(AP_SSID, AP_PASSWORD);
-    dnsServer.start(DNS_PORT, "*", WiFi.softAPIP());
     server.on("/", HTTP_GET, []() { server.send(200, "text/html", index_html); });
     server.on("/upload", HTTP_POST, []() { server.send(200, "text/plain", "OK"); }, []() {
         HTTPUpload& upload = server.upload();
@@ -468,10 +459,29 @@ void photoframe_setup() {
         server.sendHeader("Location", "http://trailmaster.io/", true);
         server.send(302, "text/plain", "");
     });
+}
+
+void start_photoframe_wifi() {
+    if (wifi_ap_running) return;
+    WiFi.softAP(AP_SSID, AP_PASSWORD);
+    dnsServer.start(DNS_PORT, "*", WiFi.softAPIP());
     server.begin();
+    wifi_ap_running = true;
+    Serial.println("✓ PhotoFrame AP Started");
+}
+
+void stop_photoframe_wifi() {
+    if (!wifi_ap_running) return;
+    server.stop();
+    dnsServer.stop();
+    WiFi.softAPdisconnect(true);
+    wifi_ap_running = false;
+    Serial.println("✓ PhotoFrame AP Stopped");
 }
 
 void photoframe_loop_handler() {
+    if (!wifi_ap_running) return;
+
     dnsServer.processNextRequest();
     server.handleClient();
 
