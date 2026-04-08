@@ -6,7 +6,7 @@
 #include <math.h>
 
 // --- SIMULATION TOGGLE ---
-#define SIMULATE_OBD 1
+#define SIMULATE_OBD 0
 
 // Declare custom fonts
 LV_FONT_DECLARE(ui_font_rajdhani200);
