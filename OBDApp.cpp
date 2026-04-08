@@ -8,14 +8,14 @@
 // --- SIMULATION TOGGLE ---
 #define SIMULATE_OBD 1
 
-// 1. Declare the fonts (Ensure ui_font_fa_32.c is in your project folder)
+// Declare custom fonts
 LV_FONT_DECLARE(ui_font_rajdhani200);
 LV_FONT_DECLARE(ui_font_fa_32); 
 
-// 2. Define Symbols using UTF-8 hex sequences (FontAwesome 6 Solid)
-#define MY_SYMBOL_TEMP    "\xEF\x8B\x89" // 0xf2c9 (thermometer-half)
-#define MY_SYMBOL_BATTERY "\xEF\x97\x9F" // 0xf5df (car-battery)
-#define MY_SYMBOL_TORQUE  "\xEF\x8B\xB1" // 0xf2f1 (rotate / rotation symbol)
+// Define Symbols (FontAwesome 6 Solid)
+#define MY_SYMBOL_TEMP    "\xEF\x8B\x89" // 0xf2c9
+#define MY_SYMBOL_BATTERY "\xEF\x97\x9F" // 0xf5df
+#define MY_SYMBOL_TORQUE  "\xEF\x8B\xB1" // 0xf2f1
 
 // --- OBD Globals ---
 lv_obj_t * obd_screen = NULL;
@@ -38,11 +38,34 @@ volatile float car_voltage = 14.1;
 volatile int car_torque = 0;
 char car_gear[4] = "N";
 
+// Navigation State
+static int obd_sub_state = 0; // 0 = Speedo, 1 = Diagnostic
+static uint32_t last_nav_time = 0;
+
 const char* obd_ssid = "WiFi_OBDII"; 
 const char* obd_ip = "192.168.0.10";
 const uint16_t obd_port = 35000;
 
 static bool obd_wifi_running = false;
+
+#if !SIMULATE_OBD
+void read_obd_response(WiFiClient& client, char* buffer, size_t max_len) {
+    unsigned long timeout = millis() + 1500;
+    int len = 0;
+    buffer[0] = '\0';
+
+    while (millis() < timeout) {
+        if (client.available()) {
+            char c = client.read();
+            if (c == '\r' || c == '\n') continue;
+            if (c == '>') { buffer[len] = '\0'; break; }
+            if (len < max_len - 1) buffer[len++] = c;
+        }
+        vTaskDelay(pdMS_TO_TICKS(1));
+    }
+    buffer[len] = '\0';
+}
+#endif
 
 void obdBackgroundWorker(void *pvParameters) {
 #if SIMULATE_OBD
@@ -80,19 +103,82 @@ void obdBackgroundWorker(void *pvParameters) {
         vTaskDelay(pdMS_TO_TICKS(100)); 
     }
 #else
-    vTaskDelay(pdMS_TO_TICKS(1000));
+    WiFiClient client;
+    char rx_buf[64];
+    while(1) {
+        if (!obd_wifi_running || WiFi.status() != WL_CONNECTED) {
+            vTaskDelay(pdMS_TO_TICKS(1000));
+            continue;
+        }
+
+        if (!client.connected()) {
+            if (client.connect(obd_ip, obd_port)) {
+                client.print("ATZ\r");
+                read_obd_response(client, rx_buf, sizeof(rx_buf));
+                vTaskDelay(pdMS_TO_TICKS(1000));
+
+                client.print("ATE0\r");
+                read_obd_response(client, rx_buf, sizeof(rx_buf));
+                vTaskDelay(pdMS_TO_TICKS(500));
+            } else {
+                vTaskDelay(pdMS_TO_TICKS(1000));
+                continue;
+            }
+        }
+
+        client.print("0105\r");
+        read_obd_response(client, rx_buf, sizeof(rx_buf));
+        char* ptr1 = strstr(rx_buf, "41 05");
+        if (ptr1) { int a; if (sscanf(ptr1, "41 05 %x", &a) == 1) car_engine_temp = a - 40; }
+        vTaskDelay(pdMS_TO_TICKS(250));
+
+        client.print("0104\r"); // Engine Load used for Torque
+        read_obd_response(client, rx_buf, sizeof(rx_buf));
+        char* ptr2 = strstr(rx_buf, "41 04");
+        if (ptr2) { int a; if (sscanf(ptr2, "41 04 %x", &a) == 1) car_torque = (a * 100) / 255; }
+        vTaskDelay(pdMS_TO_TICKS(250));
+
+        client.print("010C\r");
+        read_obd_response(client, rx_buf, sizeof(rx_buf));
+        char* ptr3 = strstr(rx_buf, "41 0C");
+        if (ptr3) { int a, b; if (sscanf(ptr3, "41 0C %x %x", &a, &b) == 2) car_rpm = ((a * 256) + b) / 4; }
+        vTaskDelay(pdMS_TO_TICKS(250));
+
+        client.print("010D\r");
+        read_obd_response(client, rx_buf, sizeof(rx_buf));
+        char* ptr4 = strstr(rx_buf, "41 0D");
+        if (ptr4) { int a; if (sscanf(ptr4, "41 0D %x", &a) == 1) car_speed = a; }
+        vTaskDelay(pdMS_TO_TICKS(250));
+
+        client.print("ATRV\r");
+        read_obd_response(client, rx_buf, sizeof(rx_buf));
+        float v = atof(rx_buf);
+        if (v > 0.0) car_voltage = v;
+
+        vTaskDelay(pdMS_TO_TICKS(250));
+    }
 #endif
 }
 
 static void obd_gesture_cb(lv_event_t * e) {
     lv_event_code_t code = lv_event_get_code(e);
+    
     if (code == LV_EVENT_LONG_PRESSED) {
         stop_obd_wifi();
         switch_to_launcher();
     } 
-    else if (code == LV_EVENT_SHORT_CLICKED) {
-        if (lv_scr_act() == obd_screen) switch_to_obd2();
-        else switch_to_obd();
+    else if (code == LV_EVENT_CLICKED) {
+        // Debounce: Prevent accidental switching within 500ms
+        if (millis() - last_nav_time < 500) return;
+        last_nav_time = millis();
+
+        if (obd_sub_state == 0) {
+            Serial.println("OBD: Switching to Diagnostic (Screen 2)");
+            switch_to_obd2();
+        } else {
+            Serial.println("OBD: Switching to Speedo (Screen 1)");
+            switch_to_obd();
+        }
     }
 }
 
@@ -101,19 +187,20 @@ void build_obd_screen() {
     lv_obj_set_style_bg_color(obd_screen, lv_color_hex(0x000000), 0);
     lv_obj_set_style_bg_opa(obd_screen, LV_OPA_COVER, 0); 
     lv_obj_clear_flag(obd_screen, LV_OBJ_FLAG_SCROLLABLE);
+rpm_meter = lv_meter_create(obd_screen);
+lv_obj_set_size(rpm_meter, 466, 466);
+lv_obj_center(rpm_meter);
+lv_obj_set_style_bg_opa(rpm_meter, 0, 0);
+lv_obj_set_style_border_width(rpm_meter, 0, 0);
+lv_obj_set_style_bg_opa(rpm_meter, 0, LV_PART_INDICATOR); 
+lv_obj_set_style_text_opa(rpm_meter, 0, 0); // KILL built-in tiny labels
+lv_obj_clear_flag(rpm_meter, LV_OBJ_FLAG_CLICKABLE);
 
-    rpm_meter = lv_meter_create(obd_screen);
-    lv_obj_set_size(rpm_meter, 466, 466);
-    lv_obj_center(rpm_meter);
-    lv_obj_set_style_bg_opa(rpm_meter, 0, 0);
-    lv_obj_set_style_border_width(rpm_meter, 0, 0);
-    lv_obj_set_style_bg_opa(rpm_meter, 0, LV_PART_INDICATOR); 
-    lv_obj_clear_flag(rpm_meter, LV_OBJ_FLAG_CLICKABLE);
+lv_meter_scale_t * scale = lv_meter_add_scale(rpm_meter);
+lv_meter_set_scale_range(rpm_meter, scale, 0, 8000, 270, 135);
+lv_meter_set_scale_ticks(rpm_meter, scale, 41, 2, 12, lv_color_hex(0xFFFFFF)); 
+lv_meter_set_scale_major_ticks(rpm_meter, scale, 5, 4, 22, lv_color_hex(0xFFFFFF), 10); // Gap doesn't matter now as opa is 0
 
-    lv_meter_scale_t * scale = lv_meter_add_scale(rpm_meter);
-    lv_meter_set_scale_range(rpm_meter, scale, 0, 8000, 270, 135);
-    lv_meter_set_scale_ticks(rpm_meter, scale, 41, 2, 12, lv_color_hex(0xFFFFFF)); 
-    lv_meter_set_scale_major_ticks(rpm_meter, scale, 5, 4, 22, lv_color_hex(0xFFFFFF), 0); 
 
     for(int i=1; i<=8; i++) {
         lv_obj_t * lbl = lv_label_create(obd_screen);
@@ -185,7 +272,6 @@ void build_obd_screen2() {
     lv_obj_set_style_arc_color(temp_arc2, lv_color_hex(0x3498DB), LV_PART_INDICATOR);
     lv_obj_remove_style(temp_arc2, NULL, LV_PART_KNOB);
 
-    // FontAwesome Temp Icon
     lv_obj_t * temp_icon = lv_label_create(obd_screen2);
     lv_label_set_text(temp_icon, MY_SYMBOL_TEMP);
     lv_obj_set_style_text_font(temp_icon, &ui_font_fa_32, 0);
@@ -212,7 +298,6 @@ void build_obd_screen2() {
     lv_obj_set_style_arc_color(torque_arc, lv_color_hex(0xE67E22), LV_PART_INDICATOR);
     lv_obj_remove_style(torque_arc, NULL, LV_PART_KNOB);
 
-    // FontAwesome Torque Icon
     lv_obj_t * torque_icon = lv_label_create(obd_screen2);
     lv_label_set_text(torque_icon, MY_SYMBOL_TORQUE);
     lv_obj_set_style_text_font(torque_icon, &ui_font_fa_32, 0);
@@ -225,7 +310,6 @@ void build_obd_screen2() {
     lv_obj_set_style_text_font(torque_val_label, &lv_font_montserrat_24, 0);
     lv_obj_align(torque_val_label, LV_ALIGN_CENTER, 160, 10);
 
-    // FontAwesome Battery Icon
     lv_obj_t * batt_icon = lv_label_create(obd_screen2);
     lv_label_set_text(batt_icon, MY_SYMBOL_BATTERY);
     lv_obj_set_style_text_font(batt_icon, &ui_font_fa_32, 0);
@@ -249,12 +333,14 @@ void build_obd_screen2() {
 
 void switch_to_obd() {
     current_state = STATE_OBD;
+    obd_sub_state = 0; // TRACK STATE EXPLICITLY
     lv_scr_load_anim(obd_screen, LV_SCR_LOAD_ANIM_NONE, 0, 0, false);
     start_obd_wifi();
 }
 
 void switch_to_obd2() {
     current_state = STATE_OBD; 
+    obd_sub_state = 1; // TRACK STATE EXPLICITLY
     lv_scr_load_anim(obd_screen2, LV_SCR_LOAD_ANIM_NONE, 0, 0, false);
 }
 
@@ -267,8 +353,20 @@ void start_obd_wifi() {
     obd_wifi_running = true; return;
 #endif
     if (obd_wifi_running) return;
-    WiFi.mode(WIFI_STA); WiFi.begin(obd_ssid);
+    
+    WiFi.disconnect(true);
+    vTaskDelay(pdMS_TO_TICKS(100));
+    WiFi.mode(WIFI_STA);
+    esp_wifi_set_protocol(WIFI_IF_STA, WIFI_PROTOCOL_11B | WIFI_PROTOCOL_11G);
+
+    IPAddress local_IP(192, 168, 0, 11);
+    IPAddress gateway(192, 168, 0, 10);
+    IPAddress subnet(255, 255, 255, 0);
+    WiFi.config(local_IP, gateway, subnet);
+    
+    WiFi.begin(obd_ssid);
     obd_wifi_running = true;
+    Serial.println("OBD: Connecting to WiFi_OBDII...");
 }
 
 void stop_obd_wifi() {
@@ -291,7 +389,7 @@ void obd_loop_handler() {
 
     bool changed = false;
 
-    if (lv_scr_act() == obd_screen) {
+    if (obd_sub_state == 0) {
         if (car_rpm != last_r) {
             lv_meter_set_indicator_end_value(rpm_meter, rpm_indicator, car_rpm);
             last_r = car_rpm;
@@ -302,9 +400,7 @@ void obd_loop_handler() {
             last_s = car_speed;
             changed = true;
         }
-    }
-
-    if (lv_scr_act() == obd_screen2) {
+    } else {
         if (strcmp(car_gear, last_g) != 0) {
             lv_label_set_text(gear_label, car_gear);
             strcpy(last_g, car_gear);
@@ -313,13 +409,11 @@ void obd_loop_handler() {
         if (car_engine_temp != last_t) {
             lv_arc_set_value(temp_arc2, car_engine_temp);
             lv_label_set_text_fmt(temp_val_label, "%d°C", car_engine_temp);
-            
             lv_color_t arc_color;
             if (car_engine_temp < 45) arc_color = lv_color_hex(0x3498DB); 
             else if (car_engine_temp < 100) arc_color = lv_color_hex(0x2ECC71); 
             else arc_color = lv_color_hex(0xE74C3C); 
             lv_obj_set_style_arc_color(temp_arc2, arc_color, LV_PART_INDICATOR);
-            
             last_t = car_engine_temp;
             changed = true;
         }
