@@ -49,6 +49,8 @@ const uint16_t obd_port = 35000;
 static bool obd_wifi_running = false;
 
 #if !SIMULATE_OBD
+static bool pids_scanned = false;
+
 void read_obd_response(WiFiClient& client, char* buffer, size_t max_len) {
     unsigned long timeout = millis() + 1500;
     int len = 0;
@@ -64,6 +66,48 @@ void read_obd_response(WiFiClient& client, char* buffer, size_t max_len) {
         vTaskDelay(pdMS_TO_TICKS(1));
     }
     buffer[len] = '\0';
+}
+
+void scanSupportedPIDs(WiFiClient& client) {
+    if (pids_scanned) return;
+    Serial.println("--- OBD PID SCAN START ---");
+    char rx_buf[64];
+    uint8_t ranges[] = {0x00, 0x20, 0x40, 0x60, 0x80, 0xA0, 0xC0};
+    
+    for (int r = 0; r < 7; r++) {
+        char cmd[16];
+        sprintf(cmd, "01%02X\r", ranges[r]);
+        client.print(cmd);
+        read_obd_response(client, rx_buf, sizeof(rx_buf));
+        
+        char search_tag[16];
+        sprintf(search_tag, "41 %02X", ranges[r]);
+        char* ptr = strstr(rx_buf, search_tag);
+        if (!ptr) {
+            Serial.printf("Range 01%02X: No response\n", ranges[r]);
+            continue;
+        }
+
+        uint32_t mask = 0;
+        unsigned int m1, m2, m3, m4;
+        if (sscanf(ptr + 6, "%x %x %x %x", &m1, &m2, &m3, &m4) == 4) {
+            mask = ((uint32_t)m1 << 24) | ((uint32_t)m2 << 16) | ((uint32_t)m3 << 8) | (uint32_t)m4;
+            Serial.printf("Mask 01%02X: %08X\n", ranges[r], mask);
+            
+            for (int i = 1; i <= 31; i++) {
+                if (mask & (1UL << (32 - i))) {
+                    int pid = ranges[r] + i;
+                    sprintf(cmd, "01%02X\r", pid);
+                    client.print(cmd);
+                    read_obd_response(client, rx_buf, sizeof(rx_buf));
+                    Serial.printf("  [PID 01%02X]: %s\n", pid, rx_buf);
+                    vTaskDelay(pdMS_TO_TICKS(100));
+                }
+            }
+        }
+    }
+    pids_scanned = true;
+    Serial.println("--- OBD PID SCAN COMPLETE ---");
 }
 #endif
 
@@ -120,6 +164,8 @@ void obdBackgroundWorker(void *pvParameters) {
                 client.print("ATE0\r");
                 read_obd_response(client, rx_buf, sizeof(rx_buf));
                 vTaskDelay(pdMS_TO_TICKS(500));
+
+                scanSupportedPIDs(client); // Perform one-time scan
             } else {
                 vTaskDelay(pdMS_TO_TICKS(1000));
                 continue;
@@ -176,7 +222,7 @@ static void obd_gesture_cb(lv_event_t * e) {
         stop_obd_wifi();
         switch_to_launcher();
     } 
-    else if (code == LV_EVENT_CLICKED) {
+    else if (code == LV_EVENT_SHORT_CLICKED) {
         // Debounce: Prevent accidental switching within 500ms
         if (millis() - last_nav_time < 500) return;
         last_nav_time = millis();
