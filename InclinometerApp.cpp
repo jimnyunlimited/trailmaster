@@ -277,6 +277,7 @@ void inclinometer_setup_imu() {
 }
 
 void inclinometer_loop_handler() {
+    if (current_state != STATE_INCLINOMETER) return;
     static unsigned long last_update = 0;
     if (millis() - last_update >= 20) {
         if (imu_ready) {

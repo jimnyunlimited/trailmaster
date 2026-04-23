@@ -480,6 +480,7 @@ void stop_photoframe_wifi() {
 }
 
 void photoframe_loop_handler() {
+    if (current_state != STATE_PHOTOFRAME) return;
     if (!wifi_ap_running) return;
 
     dnsServer.processNextRequest();
